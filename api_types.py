@@ -9,7 +9,6 @@ class DataRow(BaseModel):
     """
     Loading, input or output data row
     """
-    document: str
     qty: float
     price: float
     sum: float
@@ -20,13 +19,9 @@ class DataRow(BaseModel):
     agreement_name: str
     article_cash_flow: str
     details_cash_flow: str
-    with_without_count: str
+    is_service: bool
     unit_of_count: str
-    year: int
-
-
-class Data(BaseModel):
-    row: list[DataRow]
+    year: str
 
 
 class ModelStatuses(Enum):

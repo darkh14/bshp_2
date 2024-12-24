@@ -1,5 +1,6 @@
 from typing import Callable, Optional, Any
 from functools import wraps
+from abc import ABCMeta, abstractmethod
 
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, ConfigurationError, OperationFailure
@@ -8,12 +9,49 @@ from settings import DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_AUTH_SOURCE
 from errors import DBConnectorException
 
 
-class Connector():
+class BaseConnector():
+    __metaclass__=ABCMeta
+    
+    @abstractmethod
+    def __init__(self, base_name: str) -> None:
+        pass
+
+    @abstractmethod
+    def get_line(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> Optional[dict]:
+        pass
+
+    @abstractmethod
+    def get_lines(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> list[dict]:
+        pass
+
+    @abstractmethod
+    def set_line(self, collection_name: str, value: dict[str, Any],
+                  db_filter: Optional[dict[str, Any]] = None) -> bool:
+        pass
+    
+    @abstractmethod
+    def set_lines(self, collection_name: str, value: list[dict[str, Any]],
+                  db_filter: Optional[dict[str, Any]] = None) -> bool:
+        pass
+
+    @abstractmethod
+    def delete_lines(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> bool:
+        pass
+    
+    @abstractmethod
+    def get_count(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> int:
+        pass
+    
+    @abstractmethod
+    def drop_db(self) -> str:
+       pass
+
+
+class MongoConnector(BaseConnector):
     
     def __init__(self, base_name: str) -> None:
-        self.base_name: str = base_name
-        self.db = None
         self._connection_string = self._form_connection_string()
+        self.base_name = base_name
         self._connect()
 
     @staticmethod
@@ -37,7 +75,7 @@ class Connector():
             return result
 
         return wrapper
-    
+
     @_safe_db_action
     def get_line(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> Optional[dict]:
         """ See base method docs
@@ -53,14 +91,17 @@ class Connector():
         return result or None
     
     @_safe_db_action
-    def set_lines(self, collection_name: str, value: list[dict[str, Any]],
+    def get_lines(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> list[dict]:
+        collection = self._get_collection(collection_name)
+
+        c_filter = db_filter if db_filter else None
+        result = collection.find(c_filter, projection={'_id': False})
+
+        return list(result)
+    
+    @_safe_db_action
+    def set_line(self, collection_name: str, value: dict[str, Any],
                   db_filter: Optional[dict[str, Any]] = None) -> bool:
-        """ See base method docs
-        :param collection_name: required collection name
-        :param value: list of lines to set
-        :param db_filter: optional, db filter value to find lines
-        :return: result of setting line, True if successful
-        """
         collection = self._get_collection(collection_name)
 
         c_filter = db_filter if db_filter else None
@@ -70,17 +111,31 @@ class Connector():
             result = bool(getattr(result, 'acknowledged'))
 
         if result:
+            result = collection.insert_one(value)
+
+        return bool(getattr(result, 'acknowledged'))
+
+    @_safe_db_action
+    def set_lines(self, collection_name: str, value: list[dict[str, Any]],
+                  db_filter: Optional[dict[str, Any]] = None) -> bool:
+        collection = self._get_collection(collection_name)
+
+        c_filter = db_filter if db_filter else None
+        result = True
+        if c_filter:
+            result = collection.delete_many(c_filter)
+            result = bool(getattr(result, 'acknowledged'))
+        else:
+            result = self._db.drop_collection(collection_name)
+            result = result is not None            
+
+        if result:
             result = collection.insert_many(value)
 
         return bool(getattr(result, 'acknowledged'))
 
     @_safe_db_action
     def delete_lines(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> bool:
-        """ See base method docs
-        :param collection_name: required collection name
-        :param db_filter: optional, db filter value to find lines
-        :return: result of deleting lines, True if successful
-        """
         c_filter = db_filter if db_filter else None
         if c_filter:
             collection = self._get_collection(collection_name)
@@ -94,11 +149,6 @@ class Connector():
     
     @_safe_db_action
     def get_count(self, collection_name: str, db_filter: Optional[dict[str, Any]] = None) -> int:
-        """ See base method docs
-        :param collection_name: required collection name
-        :param db_filter: optional, db filter value to find lines
-        :return: number of lines in collection
-        """
         c_filter = db_filter if db_filter else {}
 
         collection = self._get_collection(collection_name)
@@ -108,7 +158,6 @@ class Connector():
     def drop_db(self) -> str:
         """Method to drop current database
         :return result of dropping"""
-
         result = super().drop_db()
 
         collection_names = self._get_collection_names()
@@ -122,7 +171,7 @@ class Connector():
         
         try:
             client = MongoClient(self._connection_string)
-            self.db = client[self.base_name]
+            self._db = client[self.base_name]
         except ConfigurationError as conf_ex:
             raise ConfigurationError('Configuration error! ' + str(conf_ex))
 
