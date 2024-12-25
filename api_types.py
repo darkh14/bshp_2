@@ -32,7 +32,7 @@ class ModelStatuses(Enum):
 
 
 class ModelInfo(BaseModel):
-    base_name: str
     status: ModelStatuses
-    start_date: Optional[datetime]
-    finish_date: Optional[datetime]
+    fitting_start_date: Optional[datetime]
+    fitting_end_date: Optional[datetime]
+    error_text: str

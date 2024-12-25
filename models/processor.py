@@ -1,9 +1,11 @@
 from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
 from typing import Optional, Any
 import pickle
 import pandas as pd
+from datetime import datetime, timezone
 
-from models.transformers import Imputer, CatTransformer, ModelEstimator
+from models.transformers import Imputer, CatTransformer, ModelTransformer
 from api_types import ModelStatuses
 from db_connectors.connector import BaseConnector
 
@@ -13,9 +15,12 @@ class Processor:
     def __init__(self, db_connector: BaseConnector):
         self.targets = ['article_cash_flow', 'details_cash_flow', 'is_service', 'unit_of_count', 'year']
         self.named_steps: list = list()
-        self.targets_settings: Optional[dict] = None
+        self.targets_settings: dict = {}
         self.db_connector: BaseConnector = db_connector
         self.status = ModelStatuses.NOTFIT
+        self.fitting_start_date = Optional[datetime]
+        self.fitting_end_date = Optional[datetime]
+        self.error_text: str = ''
         self._read_info_from_db()
 
         self._set_tagret_settings()
@@ -41,16 +46,17 @@ class Processor:
 
     def _set_tagret_settings(self):
 
-        self.targets_settings = {'article_cash_flow': {'x_columns': ['qty', 
-                                                                     'price', 
-                                                                     'sum', 
-                                                                     'customer', 
-                                                                     'operation_type', 
-                                                                     'moving_type', 
-                                                                     'base_document', 
-                                                                     'agreement_name'], 
-                                                       'y_columns': ['article_cash_flow']}}
-        self.targets = ['article_cash_flow'] # , 'details_cash_flow', 'year', 'unit_of_count', 'is_service'] # list(self.targets_settings.keys())
+        c_x_columns = ['qty', 
+                        'price', 
+                        'sum', 
+                        'customer', 
+                        'operation_type', 
+                        'moving_type', 
+                        'base_document', 
+                        'agreement_name']
+        for target in self.targets:
+            self.targets_settings[target] = {'x_columns': c_x_columns, 'y_columns': [target]}
+            c_x_columns.append(target)
 
     def _make_pipeleine(self, new=False):
         
@@ -84,12 +90,22 @@ class Processor:
         elif name == 'cat_transformer':
             return CatTransformer(features=self.features, cat_features=self.cat_features, targets=self.targets)
         elif c_named_step['target']:
-            return ModelEstimator(self.targets_settings[self.targets[-1]]['x_columns'], 
-                                  self.targets_settings[self.targets[-1]]['y_columns'])
+            base_estimator = RandomForestClassifier(n_estimators=200, max_depth=20, min_samples_leaf=1, min_samples_split=5)
+
+            return ModelTransformer(base_estimator,
+                                    c_named_step['target'],
+                                    self.targets_settings[c_named_step['target']]['x_columns'], 
+                                    self.targets_settings[c_named_step['target']]['y_columns'])                
         else:
             return None
 
     def fit(self, data) -> bool:
+        self.fitting_start_date = datetime.now(timezone.utc)
+        self.fitting_end_date = None
+        self.status = ModelStatuses.INPROGRESS
+        self.error_text = ''
+        self._write_info_to_db()
+
         if not self._pipeline:
             new = self.status = ModelStatuses.NOTFIT
             self._make_pipeleine(new)
@@ -98,8 +114,28 @@ class Processor:
 
         self._write_steps_to_db()
         self.status = ModelStatuses.FIT
+        self.fitting_end_date = datetime.now(timezone.utc)
+        self.error_text = ''
         self._write_info_to_db()
         return self
+    
+    def drop_fitting(self):
+        self.db_connector.delete_lines('model')
+        self.db_connector.delete_lines('model_data')
+
+        self.status = ModelStatuses.NOTFIT
+        self.fitting_start_date = None
+        self.fitting_end_date = None
+        self.error_text = ''
+        self._write_info_to_db()
+    
+    def get_info(self) -> dict[str, Any]:
+        result = {'status': self.status.value,
+                'fitting_start_date': self.fitting_start_date,
+                'fitting_end_date': self.fitting_end_date,
+                'error_text': self.error_text}
+        
+        return result
 
     def predict(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
@@ -108,11 +144,10 @@ class Processor:
 
         result = self._pipeline.predict(data)
         cat_transformer = self._pipeline.named_steps['cat_transformer']
-        result = cat_transformer.reverse_transform(result)
+        result = cat_transformer.inverse_transform(result)
 
         return result.to_dict(orient='records')
 
-    
     def _write_steps_to_db(self):
         self.db_connector.delete_lines('model')
         self.db_connector.delete_lines('model_data')
@@ -157,10 +192,21 @@ class Processor:
         line = self.db_connector.get_line('info')
         if line:
             self.status = ModelStatuses(line['status'])
+            self.fitting_start_date = line['fitting_start_date']
+            self.fitting_end_date = line['fitting_end_date']
+            self.error_text = line['error_text']
+        else:
+            self.status = ModelStatuses.NOTFIT
+            self.fitting_start_date = None
+            self.fitting_end_date = None
+            self.error_text = ''
 
     def _write_info_to_db(self):
         self.db_connector.delete_lines('info')
-        line = {'status': self.status.value}
+        line = {'status': self.status.value,
+                'fitting_start_date': self.fitting_start_date,
+                'fitting_end_date': self.fitting_end_date,
+                'error_text': self.error_text}
         self.db_connector.set_line('info', line)
 
     def _get_binary_from_object(self, data: object):

@@ -1,39 +1,8 @@
 from typing import Optional, Any
-
 import pandas as pd
 
 from sklearn.impute import SimpleImputer
-from sklearn.ensemble import RandomForestClassifier
-# from sklearn.linear_model import Ridge
-# from sklearn.model_selection import train_test_split 
-# from sklearn.preprocessing import StandardScaler, OneHotEncoder
-# from sklearn.pipeline import Pipeline
-# from sklearn.metrics import mean_squared_error
-
 from sklearn.base import BaseEstimator, TransformerMixin
-
-# def encode_objects_fit(data: list[dict]):
-#     df = pd.DataFrame(data)
-#     df.drop(['base_uid', 'document'], axis=1, inplace=True)
-#     neworder = ['qty', 'price', 'sum', 'customer', 'operation_type', 'moving_type', 'base_document', 'agreement_name',
-#                 'article_cash_flow', 'details_cash_flow', 'with_without_count', 'unit_of_count', 'year']
-#     df = df.reindex(columns=neworder)
-#     target_list = ['article_cash_flow', 'details_cash_flow', 'year', 'unit_of_count', 'with_without_count']
-#     target_dict = {}
-#     df = df.fillna(0)
-#     df.with_without_count = df.with_without_count.astype('str')
-#     list_cols = ['article_cash_flow', 'details_cash_flow', 'year', 'customer', 'operation_type', 'moving_type',
-#                  'base_document', 'agreement_name', 'unit_of_count', 'with_without_count']
-#     for col in list_cols:
-#         details = df[col].unique()
-#         numbers = [i for i in range(len(details))]
-#         details_dict = dict(zip(details, numbers))
-#         if col in target_list:
-#             target_dict[col] = details_dict
-#         df[col] = df[col].apply(lambda x: details_dict[x])
-#         df[col] = df[col].astype('int')
-
-#     return df, target_dict
 
 
 class Imputer(SimpleImputer):
@@ -91,8 +60,8 @@ class CatTransformer(TransformerMixin):
 
         return df
     
-    def reverse_transform(self, X: pd.DataFrame):
-        print('CatTransformer ------------ REVERSE TRANSFORM')
+    def inverse_transform(self, X: pd.DataFrame):
+        print('CatTransformer ------------ INVERSE TRANSFORM')
 
         df = pd.DataFrame(X)
         for col in self._cat_features:
@@ -100,31 +69,46 @@ class CatTransformer(TransformerMixin):
             df[col] = df[col].apply(lambda x: reverse_dict[x] if x != -1 else '')
             
         df['is_service'] = df['is_service'].astype('bool')
-        print(df)
         return df
 
 
-class ModelEstimator(RandomForestClassifier):
-    def __init__(self, x_columns, y_columns):
-        super().__init__(n_estimators=200, max_depth=20, min_samples_leaf=1, min_samples_split=5)
+class ModelTransformer(BaseEstimator, TransformerMixin):
+    def __init__(self, estimator, target, x_columns, y_columns):
+        self.target = target
+        self.estimator = estimator
         self.x_columns = x_columns
         self.y_columns = y_columns
+        self.is_fitted = False
 
     def fit(self, X: pd.DataFrame, y=None):
-        print('ModelEstimator ------------ FIT')
+        print('ModelTransformer {}------------ FIT'.format(self.target))
         X_transformed = X[self.x_columns].to_numpy()
         y_transformed = X[self.y_columns].to_numpy()[:,0]
 
-        return super().fit(X_transformed, y_transformed)
+        self.estimator.fit(X_transformed, y_transformed)
+        self.is_fitted = True
 
+        return self
+
+    def transform(self, X):
+        print('ModelTransformer  {}------------ TRANSFORM'.format(self.target))
+        return self._transform_predict(X)
+    
     def predict(self, X):
-        print('ModelEstimator ------------ Predict')
+        print('ModelTransformer  {}------------ PREDICT'.format(self.target))
+        return self._transform_predict(X)
+    
+    def _transform_predict(self, X):
         X_transformed = X[self.x_columns].to_numpy()
 
-        y_pred = super().predict(X_transformed)
+        y_pred = self.estimator.predict(X_transformed)
 
         result = X.copy()
         result[self.y_columns[0]] = y_pred
 
         return result
+    
+    def __sklearn_is_fitted__(self):
+        return self.is_fitted
+
 

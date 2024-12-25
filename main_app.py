@@ -26,7 +26,7 @@ def health(base_name: str) -> str:
 
 @app.post('/fit')
 def fit(data: list[DataRow], base_name: str) -> str:
-    db_connector = MongoConnector(base_name)
+    db_connector = MongoConnector('bshp_{}'.format(base_name))
     processor = Processor(db_connector)
     processor.fit([el.model_dump() for el in data])
     return 'model fitting is started'
@@ -34,7 +34,7 @@ def fit(data: list[DataRow], base_name: str) -> str:
 
 @app.post('/predict')
 def predict(data: list[DataRow], base_name: str) -> list[DataRow]:
-    db_connector = MongoConnector(base_name)
+    db_connector = MongoConnector('bshp_{}'.format(base_name))
     processor = Processor(db_connector)
     data = processor.predict([el.model_dump() for el in data])
     d = {"qty": 0,
@@ -56,14 +56,17 @@ def predict(data: list[DataRow], base_name: str) -> list[DataRow]:
 
 @app.get('/get_info')
 def get_info(base_name: str) -> ModelInfo:
-    return ModelInfo.model_validate({'base_name': base_name,
-                                     'status': ModelStatuses.NOTFIT,
-                                     'start_date': None,
-                                     'finish_date': None})
+    db_connector = MongoConnector('bshp_{}'.format(base_name))
+    processor = Processor(db_connector)
+    result = processor.get_info()
+    return ModelInfo.model_validate(result)
 
 
 @app.get('/drop_fitting')
 def drop_fitting(base_name: str) -> str:
+    db_connector = MongoConnector('bshp_{}'.format(base_name))
+    processor = Processor(db_connector)
+    processor.drop_fitting()    
     return 'fitting is dropped'
 
 
