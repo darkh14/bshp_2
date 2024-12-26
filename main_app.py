@@ -1,5 +1,6 @@
 import fastapi
 import uvicorn
+from typing import Any
 
 from models.processor import Processor
 from db_connectors.connector import MongoConnector
@@ -9,6 +10,14 @@ from version import VERSION
 app = fastapi.FastAPI(title="BSHP App",  
                       description="Application for AI cash flow parameters predictions!",
                       version=VERSION)
+
+
+def fit_background(data: list[dict[str, Any]], base_name) -> bool:
+    db_connector = MongoConnector('bshp_{}'.format(base_name))
+    processor = Processor(db_connector)
+    processor.fit([el.model_dump() for el in data])
+    return True
+
 
 @app.get('/')
 async def main_page():
@@ -25,10 +34,8 @@ def health(base_name: str) -> str:
 
 
 @app.post('/fit')
-def fit(data: list[DataRow], base_name: str) -> str:
-    db_connector = MongoConnector('bshp_{}'.format(base_name))
-    processor = Processor(db_connector)
-    processor.fit([el.model_dump() for el in data])
+def fit(data: list[DataRow], base_name: str, background_tasks: fastapi.BackgroundTasks) -> str:
+    background_tasks.add_task(fit_background, data, base_name=base_name)
     return 'model fitting is started'
 
 
