@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from models.transformers import Imputer, CatTransformer, ModelTransformer
 from api_types import ModelStatuses
 from db_connectors.connector import BaseConnector
+from errors import ModuleBaseException
 
 
 class Processor:
@@ -100,18 +101,33 @@ class Processor:
             return None
 
     def fit(self, data) -> bool:
+        if self.status == ModelStatuses.INPROGRESS:
+            raise ModuleBaseException('Model is fitting in other process')
+
         self.fitting_start_date = datetime.now(timezone.utc)
         self.fitting_end_date = None
         self.status = ModelStatuses.INPROGRESS
         self.error_text = ''
         self._write_info_to_db()
 
-        if not self._pipeline:
-            new = self.status = ModelStatuses.NOTFIT
-            self._make_pipeleine(new)
+        try:
+            if not self._pipeline:
+                new = self.status = ModelStatuses.NOTFIT
+                self._make_pipeleine(new)
 
-        self._pipeline.fit(data)
+            self._pipeline.fit(data)
+        except Exception as e:
+            self.status = ModelStatuses.ERROR
+            self.fitting_end_date = datetime.now(timezone.utc)
+            self.error_text = str(e)
+            self._write_info_to_db()
+            raise ModuleBaseException(str(e))
 
+        self._read_info_from_db()
+
+        if self.status != ModelStatuses.INPROGRESS:
+            raise ModuleBaseException('Model is fitting in other process')
+        
         self._write_steps_to_db()
         self.status = ModelStatuses.FIT
         self.fitting_end_date = datetime.now(timezone.utc)
