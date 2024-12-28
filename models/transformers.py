@@ -17,6 +17,7 @@ class Imputer(SimpleImputer):
         print('Imputer ------------ FIT')
         df = pd.DataFrame(X)        
         super().fit(df[self._numeric_features])
+        print('done------------------')        
         return self
 
     def transform(self, X: list[dict[str, Any]]) -> pd.DataFrame:
@@ -26,7 +27,7 @@ class Imputer(SimpleImputer):
         df[self._numeric_features] = super().transform(df[self._numeric_features])
 
         df['is_service'] = df['is_service'].astype('str')
-
+        print('done------------------')
         return df
 
 
@@ -47,7 +48,7 @@ class CatTransformer(TransformerMixin):
             numbers = [i for i in range(len(details))]
             details_dict = dict(zip(details, numbers))
             self._columns_dict[col] = details_dict
-
+        print('done------------------')
         return self
 
     def transform(self, X: pd.DataFrame):
@@ -56,6 +57,7 @@ class CatTransformer(TransformerMixin):
         for col in self._cat_features:
             df[col] = df[col].apply(lambda x: self._columns_dict[col][x] if x != '' else -1)
             df[col] = df[col].astype('int')
+        print('done------------------')
         return df
     
     def inverse_transform(self, X: pd.DataFrame):
@@ -67,6 +69,7 @@ class CatTransformer(TransformerMixin):
             df[col] = df[col].apply(lambda x: reverse_dict[x] if x != -1 else '')
             
         df['is_service'] = df['is_service'].astype('bool')
+        print('done------------------')
         return df
 
 
@@ -87,18 +90,22 @@ class ModelTransformer(BaseEstimator, TransformerMixin):
         self.estimator.fit(X_transformed, y_transformed)
         self.is_fitted = True
         self.fitting_mode = True
+        print('done------------------')
 
         return self
 
     def transform(self, X):
         print('ModelTransformer  {}------------ TRANSFORM'.format(self.target))        
         result = X if self.fitting_mode else self._transform_predict(X)   
-        self.fitting_mode = False         
+        self.fitting_mode = False
+        print('done------------------')                 
         return result
     
     def predict(self, X):
         print('ModelTransformer  {}------------ PREDICT'.format(self.target))
-        return self._transform_predict(X)
+        result = self._transform_predict(X)
+        print('done------------------')
+        return result
     
     def _transform_predict(self, X):
         X_transformed = X[self.x_columns].to_numpy()

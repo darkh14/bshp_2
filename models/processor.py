@@ -166,6 +166,7 @@ class Processor:
         return result.to_dict(orient='records')
 
     def _write_steps_to_db(self):
+        print('WRITE TO DB------------------')
         self.db_connector.delete_lines('model')
         self.db_connector.delete_lines('model_data')
         data = []
@@ -192,6 +193,7 @@ class Processor:
 
             data.append(data_row)
         self.db_connector.set_lines('model', data)
+        print('done------------------')        
 
     def _get_steps_from_db(self):
         db_steps = self.db_connector.get_lines('model')
