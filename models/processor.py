@@ -26,22 +26,23 @@ class Processor:
 
         self._set_tagret_settings()
 
-        self.features: list = ['qty', 
-                    'price', 
-                    'sum', 
-                    'customer', 
-                    'operation_type', 
-                    'moving_type', 
-                    'base_document', 
-                    'agreement_name',
-                    'article_cash_flow', 
-                    'details_cash_flow', 
-                    'is_service', 
-                    'unit_of_count', 
-                    'year']
+        self.features: list = ['document',
+                                'qty', 
+                                'price', 
+                                'sum', 
+                                'customer', 
+                                'operation_type', 
+                                'moving_type', 
+                                'base_article', 
+                                'agreement_name',
+                                'article_cash_flow', 
+                                'details_cash_flow', 
+                                'is_service', 
+                                'unit_of_count', 
+                                'year']
         
-        self.cat_features: list = ['article_cash_flow', 'details_cash_flow', 'year', 'customer', 'operation_type', 'moving_type', 
-                             'base_document', 'agreement_name', 'unit_of_count', 'is_service']
+        self.cat_features: list = ['document', 'article_cash_flow', 'details_cash_flow', 'year', 'customer', 'operation_type', 'moving_type', 
+                             'base_article', 'agreement_name', 'unit_of_count', 'is_service']
         
         self._pipeline: Optional[Pipeline] = None
 
@@ -53,10 +54,10 @@ class Processor:
                         'customer', 
                         'operation_type', 
                         'moving_type', 
-                        'base_document', 
+                        'base_article', 
                         'agreement_name']
         for target in self.targets:
-            self.targets_settings[target] = {'x_columns': c_x_columns, 'y_columns': [target]}
+            self.targets_settings[target] = {'x_columns': c_x_columns.copy(), 'y_columns': [target]}
             c_x_columns.append(target)
 
     def _make_pipeleine(self, new=False):
@@ -115,7 +116,8 @@ class Processor:
                 new = self.status = ModelStatuses.NOTFIT
                 self._make_pipeleine(new)
 
-            self._pipeline.fit(data)
+            self._pipeline.fit(data)                         
+
         except Exception as e:
             self.status = ModelStatuses.ERROR
             self.fitting_end_date = datetime.now(timezone.utc)
@@ -134,7 +136,7 @@ class Processor:
         self.error_text = ''
         self._write_info_to_db()
         return self
-    
+
     def drop_fitting(self):
         self.db_connector.delete_lines('model')
         self.db_connector.delete_lines('model_data')
@@ -156,12 +158,11 @@ class Processor:
     def predict(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         if not self._pipeline:
-            self._make_pipeleine()
+            self._make_pipeleine()          
 
         result = self._pipeline.predict(data)
         cat_transformer = self._pipeline.named_steps['cat_transformer']
         result = cat_transformer.inverse_transform(result)
-
         return result.to_dict(orient='records')
 
     def _write_steps_to_db(self):

@@ -15,8 +15,7 @@ class Imputer(SimpleImputer):
 
     def fit(self, X: list[dict[str, Any]], y=None):
         print('Imputer ------------ FIT')
-        df = pd.DataFrame(X)
-        
+        df = pd.DataFrame(X)        
         super().fit(df[self._numeric_features])
         return self
 
@@ -52,12 +51,11 @@ class CatTransformer(TransformerMixin):
         return self
 
     def transform(self, X: pd.DataFrame):
-        print('CatTransformer ------------ TRANSFORM')
-        df = pd.DataFrame(X)
+        print('CatTransformer ------------ TRANSFORM')      
+        df = pd.DataFrame(X)    
         for col in self._cat_features:
             df[col] = df[col].apply(lambda x: self._columns_dict[col][x] if x != '' else -1)
             df[col] = df[col].astype('int')
-
         return df
     
     def inverse_transform(self, X: pd.DataFrame):
@@ -79,6 +77,7 @@ class ModelTransformer(BaseEstimator, TransformerMixin):
         self.x_columns = x_columns
         self.y_columns = y_columns
         self.is_fitted = False
+        self.fitting_mode = False
 
     def fit(self, X: pd.DataFrame, y=None):
         print('ModelTransformer {}------------ FIT'.format(self.target))
@@ -87,12 +86,15 @@ class ModelTransformer(BaseEstimator, TransformerMixin):
 
         self.estimator.fit(X_transformed, y_transformed)
         self.is_fitted = True
+        self.fitting_mode = True
 
         return self
 
     def transform(self, X):
-        print('ModelTransformer  {}------------ TRANSFORM'.format(self.target))
-        return self._transform_predict(X)
+        print('ModelTransformer  {}------------ TRANSFORM'.format(self.target))        
+        result = X if self.fitting_mode else self._transform_predict(X)   
+        self.fitting_mode = False         
+        return result
     
     def predict(self, X):
         print('ModelTransformer  {}------------ PREDICT'.format(self.target))

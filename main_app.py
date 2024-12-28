@@ -43,21 +43,7 @@ def fit(data: list[DataRow], base_name: str, background_tasks: fastapi.Backgroun
 def predict(data: list[DataRow], base_name: str) -> list[DataRow]:
     db_connector = MongoConnector('bshp_{}'.format(base_name))
     processor = Processor(db_connector)
-    data = processor.predict([el.model_dump() for el in data])
-    d = {"qty": 0,
-                                    "price": 0,
-                                    "sum": 0,
-                                    "customer": "string",
-                                    "operation_type": "string",
-                                    "moving_type": "string",
-                                    "base_document": "string",
-                                    "agreement_name": "string",
-                                    "article_cash_flow": "string",
-                                    "details_cash_flow": "string",
-                                    "is_service": True,
-                                    "unit_of_count": "string",
-                                    "year": "string"}
-    
+    data = processor.predict([el.model_dump() for el in data])    
     return data
 
 

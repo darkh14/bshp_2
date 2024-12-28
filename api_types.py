@@ -9,13 +9,14 @@ class DataRow(BaseModel):
     """
     Loading, input or output data row
     """
+    document: str
     qty: float
     price: float
     sum: float
     customer: str
     operation_type: str
     moving_type: str
-    base_document: str
+    base_article: str
     agreement_name: str
     article_cash_flow: str
     details_cash_flow: str
